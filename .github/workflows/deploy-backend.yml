@@ -1,0 +1,46 @@
+name: Deploy backend
+
+on:
+  push:
+    branches:
+      - main
+      - add-deploy-workflow
+    paths:
+      - 'backend/**'
+
+jobs:
+  deploy:
+    name: Deploy backend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+    - uses: actions/checkout@master
+
+    - uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          backend/target/
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Build project
+      run: cargo +nightly build --release
+
+    - name: Install SSH key
+      uses: shimataro/ssh-key-action@v2
+      with:
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        known_hosts: ${{ secrets.SSH_KNOWN_HOSTS }}
+
+    - name: Push dist
+      run: rsync -rtzv -e 'ssh -o "StrictHostKeyChecking no" -p ${{ secrets.REMOTE_PORT}}' target/release/scuffed ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }}:/home/${{ secrets.REMOTE_USER }}/scuffed/backend/scuffed
+
+    - name: Run deploy script
+      run: |
+        ssh -o "StrictHostKeyChecking no" -p ${{ secrets.REMOTE_PORT }} ${{ secrets.REMOTE_USER}}@${{ secrets.REMOTE_HOST }} sudo /home/${{ secrets.REMOTE_USER }}/scuffed/deploy-backend.sh
